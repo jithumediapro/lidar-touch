@@ -1,3 +1,4 @@
+import math
 import time
 import numpy as np
 from PyQt5.QtCore import QThread, pyqtSignal
@@ -9,12 +10,17 @@ class LidarScanner(QThread):
     scan_ready = pyqtSignal(float, object, object)  # timestamp, angles, distances
     connection_status = pyqtSignal(str)
 
+    NUM_POINTS = 1081
+    ANGLE_MIN = math.radians(-135)
+    ANGLE_MAX = math.radians(135)
+
     def __init__(self, ip="192.168.0.10", port=10940, parent=None):
         super().__init__(parent)
         self._ip = ip
         self._port = port
         self._running = False
         self._laser = None
+        self._angles = np.linspace(self.ANGLE_MIN, self.ANGLE_MAX, self.NUM_POINTS)
 
     def run(self):
         from hokuyolx import HokuyoLX
@@ -30,9 +36,8 @@ class LidarScanner(QThread):
         while self._running:
             try:
                 timestamp, scan = self._laser.get_dist()
-                angles = scan[:, 0].astype(np.float64)
-                distances = scan[:, 1].astype(np.float64)
-                self.scan_ready.emit(float(timestamp), angles, distances)
+                distances = scan.astype(np.float64)
+                self.scan_ready.emit(float(timestamp), self._angles.copy(), distances)
             except Exception as e:
                 self.connection_status.emit(f"error: {e}")
                 # Try to reconnect after a brief pause
