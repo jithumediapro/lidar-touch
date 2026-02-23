@@ -103,9 +103,9 @@ class LidarView(QWidget):
         min_dist = snap['min_distance_mm']
         scale = min(w * 0.45, h * 0.85) / max_dist
 
-        # Base origin at bottom-center, then shift by sensor position + pan
-        cx = w / 2.0 + snap.get('sensor_x_offset', 0.0) * scale + self._pan_offset_x
-        cy = h - 30.0 - snap.get('sensor_y_offset', 0.0) * scale + self._pan_offset_y
+        # Base origin at bottom-center + pan offset
+        cx = w / 2.0 + self._pan_offset_x
+        cy = h - 30.0 + self._pan_offset_y
 
         # Draw distance rings
         self._draw_distance_rings(painter, cx, cy, scale, max_dist)
@@ -131,7 +131,7 @@ class LidarView(QWidget):
         self._draw_touch_markers(painter, cx, cy, scale, frame)
 
         # Draw sensor icon
-        self._draw_sensor(painter, cx, cy, scale)
+        self._draw_sensor(painter, cx, cy, scale, snap)
 
         # Draw info overlay
         self._draw_info(painter, frame)
@@ -408,13 +408,22 @@ class LidarView(QWidget):
         painter.setFont(QFont("Arial", 7))
         painter.drawText(bounds, Qt.AlignCenter, "Active Area")
 
-    def _draw_sensor(self, painter, cx, cy, scale):
-        """Draw the sensor as a 50x50mm (5x5cm) red square at the origin."""
+    def _draw_sensor(self, painter, cx, cy, scale, snap):
+        """Draw the sensor as a 50x50mm (5x5cm) red square."""
+        sensor_x = snap.get('sensor_x_offset', 0.0)
+        sensor_y = snap.get('sensor_y_offset', 0.0)
+
+        # Position sensor icon using offset
+        if abs(sensor_x) < 0.001 and abs(sensor_y) < 0.001:
+            sx, sy = cx, cy
+        else:
+            sx, sy = self._cartesian_to_screen(sensor_x, sensor_y, cx, cy, scale)
+
         # 50mm sensor size, with minimum 20px for visibility
         sensor_size_px = max(50.0 * scale, 20.0)
         half = sensor_size_px / 2.0
 
-        rect = QRectF(cx - half, cy - half, sensor_size_px, sensor_size_px)
+        rect = QRectF(sx - half, sy - half, sensor_size_px, sensor_size_px)
 
         # Red sensor body
         painter.setPen(QPen(QColor(255, 60, 60, 220), 2.0))
