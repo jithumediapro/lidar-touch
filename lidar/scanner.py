@@ -5,7 +5,7 @@ from PyQt5.QtCore import QThread, pyqtSignal
 
 
 class LidarScanner(QThread):
-    """Real UST-10LX scanner via hokuyolx library."""
+    """Hokuyo UST-series scanner (UST-10LX / UST-20LX) via hokuyolx library."""
 
     scan_ready = pyqtSignal(float, object, object)  # timestamp, angles, distances
     connection_status = pyqtSignal(str)

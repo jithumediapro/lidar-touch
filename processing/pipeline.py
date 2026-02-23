@@ -26,18 +26,24 @@ class FrameResult:
     bg_is_learned: bool = False
     processing_time_ms: float = 0.0
     frame_seq: int = 0
+    sensor_index: int = 0
 
 
 class ProcessingPipeline(QThread):
-    """Chains all processing stages: Filter -> Background -> Cluster -> Track -> Normalize."""
+    """Chains all processing stages: Filter -> Background -> Cluster -> Track.
+
+    Emits raw mm-coordinate touches. Normalization and screen filtering
+    are handled by the TouchRouter.
+    """
 
     frame_processed = pyqtSignal(object)  # FrameResult
-    touches_updated = pyqtSignal(object, int)  # list[TrackedTouch], frame_seq
+    touches_updated = pyqtSignal(object, int, int)  # list[TrackedTouch], sensor_index, frame_seq
     learning_progress = pyqtSignal(float)  # 0.0 to 1.0
 
-    def __init__(self, settings, parent=None):
+    def __init__(self, settings, sensor_index=0, parent=None):
         super().__init__(parent)
         self._settings = settings
+        self._sensor_index = sensor_index
         self._queue = queue.Queue(maxsize=2)
         self._running = False
         self._frame_seq = 0
@@ -45,13 +51,15 @@ class ProcessingPipeline(QThread):
         self._learn_requested = False
         self._reset_requested = False
 
-        # Processing components
+        # Processing components — read per-sensor settings
+        sensor = settings.get_sensor(sensor_index) or {}
         snap = settings.get_snapshot()
+
         self._filter = ScanFilter(
-            min_dist_mm=snap['min_distance_mm'],
-            max_dist_mm=snap['max_distance_mm'],
-            min_angle_deg=snap['min_angle_deg'],
-            max_angle_deg=snap['max_angle_deg'],
+            min_dist_mm=sensor.get('min_distance_mm', 20.0),
+            max_dist_mm=sensor.get('max_distance_mm', 1500.0),
+            min_angle_deg=sensor.get('min_angle_deg', -90.0),
+            max_angle_deg=sensor.get('max_angle_deg', 90.0),
         )
         self._background = BackgroundModel(
             num_learning_frames=snap['bg_learning_frames'],
@@ -65,21 +73,6 @@ class ProcessingPipeline(QThread):
         self._tracker = BlobTracker(
             max_distance_mm=snap['max_tracking_distance_mm'],
             timeout_frames=snap['touch_timeout_frames'],
-        )
-        self._mapper = CoordinateMapper(
-            screen_width_mm=snap['screen_width_mm'],
-            screen_height_mm=snap['screen_height_mm'],
-            screen_offset_x=snap['screen_offset_x'],
-            screen_offset_y=snap['screen_offset_y'],
-            sensor_x_offset=snap['sensor_x_offset'],
-            sensor_y_offset=snap['sensor_y_offset'],
-            sensor_z_rotation=snap['sensor_z_rotation'],
-            x_flip=snap['sensor_x_flip'],
-            y_flip=snap['sensor_y_flip'],
-            min_angle_deg=snap['min_angle_deg'],
-            max_angle_deg=snap['max_angle_deg'],
-            min_dist_mm=snap['min_distance_mm'],
-            max_dist_mm=snap['max_distance_mm'],
         )
 
     @pyqtSlot(float, object, object)
@@ -104,13 +97,14 @@ class ProcessingPipeline(QThread):
 
     def _sync_settings(self):
         """Read current settings and update processing components."""
+        sensor = self._settings.get_sensor(self._sensor_index) or {}
         snap = self._settings.get_snapshot()
 
         self._filter.update_params(
-            min_dist_mm=snap['min_distance_mm'],
-            max_dist_mm=snap['max_distance_mm'],
-            min_angle_deg=snap['min_angle_deg'],
-            max_angle_deg=snap['max_angle_deg'],
+            min_dist_mm=sensor.get('min_distance_mm', 20.0),
+            max_dist_mm=sensor.get('max_distance_mm', 1500.0),
+            min_angle_deg=sensor.get('min_angle_deg', -90.0),
+            max_angle_deg=sensor.get('max_angle_deg', 90.0),
         )
         self._background.threshold = snap['bg_subtraction_threshold_mm']
         self._background.num_frames = snap['bg_learning_frames']
@@ -121,24 +115,11 @@ class ProcessingPipeline(QThread):
         )
         self._tracker.max_distance_mm = snap['max_tracking_distance_mm']
         self._tracker.timeout_frames = snap['touch_timeout_frames']
-        self._mapper.update_params(
-            screen_width_mm=snap['screen_width_mm'],
-            screen_height_mm=snap['screen_height_mm'],
-            screen_offset_x=snap['screen_offset_x'],
-            screen_offset_y=snap['screen_offset_y'],
-            sensor_x_offset=snap['sensor_x_offset'],
-            sensor_y_offset=snap['sensor_y_offset'],
-            sensor_z_rotation=snap['sensor_z_rotation'],
-            x_flip=snap['sensor_x_flip'],
-            y_flip=snap['sensor_y_flip'],
-            min_angle_deg=snap['min_angle_deg'],
-            max_angle_deg=snap['max_angle_deg'],
-            min_dist_mm=snap['min_distance_mm'],
-            max_dist_mm=snap['max_distance_mm'],
-        )
 
     def run(self):
         self._running = True
+        # Auto-learn background on start
+        self._learn_requested = True
 
         while self._running:
             try:
@@ -184,7 +165,7 @@ class ProcessingPipeline(QThread):
             if len(fg_indices) > 0:
                 fg_angles = angles[fg_indices]
                 fg_distances = distances[fg_indices]
-                fg_points_xy = self._mapper.polar_to_cartesian(fg_angles, fg_distances)
+                fg_points_xy = CoordinateMapper.polar_to_cartesian(fg_angles, fg_distances)
             else:
                 fg_points_xy = np.empty((0, 2))
 
@@ -193,13 +174,6 @@ class ProcessingPipeline(QThread):
 
             # 5. Track
             touches = self._tracker.update(blobs, dt)
-
-            # 6. Normalize touch positions
-            for touch in touches:
-                nx, ny = self._mapper.to_normalized(
-                    touch.centroid_xy[0], touch.centroid_xy[1]
-                )
-                touch.normalized_pos = (nx, ny)
 
             # Build cluster labels for visualization
             cluster_labels = np.full(len(fg_points_xy), -1, dtype=int)
@@ -223,16 +197,13 @@ class ProcessingPipeline(QThread):
                 bg_is_learned=self._background.is_learned,
                 processing_time_ms=proc_time,
                 frame_seq=self._frame_seq,
+                sensor_index=self._sensor_index,
             )
 
             self.frame_processed.emit(result)
 
-            # Only send touches inside the active area (screen rectangle) via TUIO
-            active_touches = [
-                t for t in touches
-                if self._mapper.is_in_screen_area(t.centroid_xy[0], t.centroid_xy[1])
-            ]
-            self.touches_updated.emit(active_touches, self._frame_seq)
+            # Emit raw mm-coordinate touches + sensor_index (routing done by TouchRouter)
+            self.touches_updated.emit(touches, self._sensor_index, self._frame_seq)
 
     def stop(self):
         self._running = False

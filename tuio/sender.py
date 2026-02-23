@@ -6,11 +6,10 @@ from pythonosc.udp_client import SimpleUDPClient
 class TuioSender:
     """TUIO 1.1 /tuio/2Dcur sender over UDP."""
 
-    SOURCE_NAME = "HokuyoTouch"
-
-    def __init__(self, host="127.0.0.1", port=3333):
+    def __init__(self, host="127.0.0.1", port=3333, source_name="HokuyoTouch"):
         self._client = SimpleUDPClient(host, port)
         self._enabled = True
+        self._source_name = source_name
 
     @property
     def enabled(self):
@@ -34,7 +33,7 @@ class TuioSender:
             # Source message
             source_msg = OscMessageBuilder(address="/tuio/2Dcur")
             source_msg.add_arg("source")
-            source_msg.add_arg(self.SOURCE_NAME)
+            source_msg.add_arg(self._source_name)
             bundle.add_content(source_msg.build())
 
             # Alive message
