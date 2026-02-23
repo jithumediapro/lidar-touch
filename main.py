@@ -55,7 +55,7 @@ def main():
     # In mock mode, auto-start the scanner
     if args.mock:
         scanner.start()
-        window.control_panel.devices.set_connection_status("connected")
+        window.control_panel.devices.set_connection_status("mock")
         window.control_panel.devices._connect_btn.setEnabled(False)
         window.control_panel.devices._stop_btn.setEnabled(True)
 
