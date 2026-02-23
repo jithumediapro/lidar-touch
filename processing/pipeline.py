@@ -226,7 +226,13 @@ class ProcessingPipeline(QThread):
             )
 
             self.frame_processed.emit(result)
-            self.touches_updated.emit(touches, self._frame_seq)
+
+            # Only send touches inside the active area (screen rectangle) via TUIO
+            active_touches = [
+                t for t in touches
+                if self._mapper.is_in_screen_area(t.centroid_xy[0], t.centroid_xy[1])
+            ]
+            self.touches_updated.emit(active_touches, self._frame_seq)
 
     def stop(self):
         self._running = False

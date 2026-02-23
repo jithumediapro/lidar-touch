@@ -128,7 +128,7 @@ class LidarView(QWidget):
         self._draw_foreground_points(painter, cx, cy, scale, frame)
 
         # Draw touch markers
-        self._draw_touch_markers(painter, cx, cy, scale, frame)
+        self._draw_touch_markers(painter, cx, cy, scale, frame, snap)
 
         # Draw sensor icon
         self._draw_sensor(painter, cx, cy, scale, snap)
@@ -268,22 +268,43 @@ class LidarView(QWidget):
             painter.setPen(QPen(color, 4))
             painter.drawPoint(QPointF(sx, sy))
 
-    def _draw_touch_markers(self, painter, cx, cy, scale, frame):
-        """Draw touch centroids as labeled red circles."""
+    def _is_touch_in_screen(self, x_mm, y_mm, snap):
+        """Check if a touch point falls within the screen rectangle."""
+        w = snap.get('screen_width_mm', 0)
+        h = snap.get('screen_height_mm', 0)
+        ox = snap.get('screen_offset_x', 0)
+        oy = snap.get('screen_offset_y', 0)
+        if w <= 0 or h <= 0:
+            return False
+        half_w = w / 2.0
+        half_h = h / 2.0
+        return (ox - half_w <= x_mm <= ox + half_w and
+                oy - half_h <= y_mm <= oy + half_h)
+
+    def _draw_touch_markers(self, painter, cx, cy, scale, frame, snap):
+        """Draw touch centroids — red if inside screen, gray if outside."""
         for touch in frame.touches:
             x_mm, y_mm = touch.centroid_xy
             dist = math.sqrt(x_mm * x_mm + y_mm * y_mm)
             angle = math.atan2(y_mm, x_mm)
             sx, sy = self._angle_to_screen(angle, dist, cx, cy, scale)
 
-            # Red circle
+            inside = self._is_touch_in_screen(x_mm, y_mm, snap)
+
             r = 12
-            painter.setPen(QPen(QColor(255, 50, 50), 2))
-            painter.setBrush(QBrush(QColor(255, 50, 50, 80)))
+            if inside:
+                # Red circle for active touches
+                painter.setPen(QPen(QColor(255, 50, 50), 2))
+                painter.setBrush(QBrush(QColor(255, 50, 50, 80)))
+            else:
+                # Gray circle for outside touches
+                painter.setPen(QPen(QColor(120, 120, 120), 2))
+                painter.setBrush(QBrush(QColor(120, 120, 120, 50)))
             painter.drawEllipse(QPointF(sx, sy), r, r)
 
             # Session ID label
-            painter.setPen(QColor(255, 255, 255))
+            label_color = QColor(255, 255, 255) if inside else QColor(150, 150, 150)
+            painter.setPen(label_color)
             painter.setFont(QFont("Arial", 9, QFont.Bold))
             painter.drawText(
                 QRectF(sx - 20, sy - r - 18, 40, 16),
@@ -293,7 +314,7 @@ class LidarView(QWidget):
 
             # Normalized position label
             painter.setFont(QFont("Arial", 7))
-            painter.setPen(QColor(200, 200, 200))
+            painter.setPen(QColor(200, 200, 200) if inside else QColor(130, 130, 130))
             painter.drawText(
                 QRectF(sx - 30, sy + r + 2, 60, 14),
                 Qt.AlignCenter,

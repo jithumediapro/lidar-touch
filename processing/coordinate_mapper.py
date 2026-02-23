@@ -96,3 +96,13 @@ class CoordinateMapper:
         ny = max(0.0, min(1.0, ny))
 
         return nx, ny
+
+    def is_in_screen_area(self, x_mm, y_mm):
+        """Check if a Cartesian point falls within the screen rectangle."""
+        tx, ty = self.apply_transform(x_mm, y_mm)
+
+        half_w = self.screen_width_mm / 2.0
+        half_h = self.screen_height_mm / 2.0
+
+        return (self.screen_offset_x - half_w <= tx <= self.screen_offset_x + half_w and
+                self.screen_offset_y - half_h <= ty <= self.screen_offset_y + half_h)
