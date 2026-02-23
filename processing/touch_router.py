@@ -23,6 +23,13 @@ class TouchRouter(QObject):
     def _get_mapper(self, sensor_index, screen_index, sensor_cfg, screen_cfg):
         """Get or create a CoordinateMapper for a sensor+screen pair."""
         key = (sensor_index, screen_index)
+        active_area_kwargs = {
+            'active_area_enabled': screen_cfg.get('active_area_enabled', False),
+            'active_area_width_mm': screen_cfg.get('active_area_width_mm'),
+            'active_area_height_mm': screen_cfg.get('active_area_height_mm'),
+            'active_area_offset_x': screen_cfg.get('active_area_offset_x'),
+            'active_area_offset_y': screen_cfg.get('active_area_offset_y'),
+        }
         mapper = self._mappers.get(key)
         if mapper is None:
             mapper = CoordinateMapper(
@@ -39,6 +46,7 @@ class TouchRouter(QObject):
                 max_angle_deg=sensor_cfg.get('max_angle_deg', 90.0),
                 min_dist_mm=sensor_cfg.get('min_distance_mm', 20.0),
                 max_dist_mm=sensor_cfg.get('max_distance_mm', 1500.0),
+                **active_area_kwargs,
             )
             self._mappers[key] = mapper
         else:
@@ -57,6 +65,7 @@ class TouchRouter(QObject):
                 max_angle_deg=sensor_cfg.get('max_angle_deg', 90.0),
                 min_dist_mm=sensor_cfg.get('min_distance_mm', 20.0),
                 max_dist_mm=sensor_cfg.get('max_distance_mm', 1500.0),
+                **active_area_kwargs,
             )
         return mapper
 

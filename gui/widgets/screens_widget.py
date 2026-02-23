@@ -2,7 +2,7 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
     QLineEdit, QDoubleSpinBox, QFormLayout, QListWidget,
-    QPushButton,
+    QPushButton, QCheckBox,
 )
 
 
@@ -82,6 +82,43 @@ class ScreensWidget(QWidget):
         group.setLayout(form)
         layout.addWidget(group)
 
+        # --- Active Area Group ---
+        aa_group = QGroupBox("Active Area")
+        aa_form = QFormLayout()
+
+        self._aa_enabled = QCheckBox("Custom Active Area")
+        self._aa_enabled.toggled.connect(self._on_aa_toggled)
+        aa_form.addRow(self._aa_enabled)
+
+        self._aa_width = QDoubleSpinBox()
+        self._aa_width.setRange(1, 100000)
+        self._aa_width.setSuffix(" mm")
+        self._aa_width.setSingleStep(10)
+        self._aa_width.valueChanged.connect(self._emit_settings)
+        aa_form.addRow("Width:", self._aa_width)
+
+        self._aa_height = QDoubleSpinBox()
+        self._aa_height.setRange(1, 100000)
+        self._aa_height.setSuffix(" mm")
+        self._aa_height.setSingleStep(10)
+        self._aa_height.valueChanged.connect(self._emit_settings)
+        aa_form.addRow("Height:", self._aa_height)
+
+        self._aa_offset_x = QDoubleSpinBox()
+        self._aa_offset_x.setRange(-50000, 50000)
+        self._aa_offset_x.setSuffix(" mm")
+        self._aa_offset_x.valueChanged.connect(self._emit_settings)
+        aa_form.addRow("Offset X:", self._aa_offset_x)
+
+        self._aa_offset_y = QDoubleSpinBox()
+        self._aa_offset_y.setRange(-50000, 50000)
+        self._aa_offset_y.setSuffix(" mm")
+        self._aa_offset_y.valueChanged.connect(self._emit_settings)
+        aa_form.addRow("Offset Y:", self._aa_offset_y)
+
+        aa_group.setLayout(aa_form)
+        layout.addWidget(aa_group)
+
         # Info
         info_group = QGroupBox("Info")
         info_layout = QVBoxLayout()
@@ -128,7 +165,10 @@ class ScreensWidget(QWidget):
         for widget in (self._name_edit, self._width, self._height,
                        self._offset_x, self._offset_y):
             widget.setEnabled(has_screen)
+        self._aa_enabled.setEnabled(has_screen)
         if not has_screen:
+            for w in (self._aa_width, self._aa_height, self._aa_offset_x, self._aa_offset_y):
+                w.setEnabled(False)
             self._loading = False
             return
 
@@ -137,7 +177,33 @@ class ScreensWidget(QWidget):
         self._height.setValue(screen.get('screen_height_mm', 1080.0))
         self._offset_x.setValue(screen.get('screen_offset_x', 0.0))
         self._offset_y.setValue(screen.get('screen_offset_y', 0.0))
+
+        aa_enabled = screen.get('active_area_enabled', False)
+        self._aa_enabled.setChecked(aa_enabled)
+        self._aa_width.setValue(screen.get('active_area_width_mm', screen.get('screen_width_mm', 1920.0)))
+        self._aa_height.setValue(screen.get('active_area_height_mm', screen.get('screen_height_mm', 1080.0)))
+        self._aa_offset_x.setValue(screen.get('active_area_offset_x', screen.get('screen_offset_x', 0.0)))
+        self._aa_offset_y.setValue(screen.get('active_area_offset_y', screen.get('screen_offset_y', 0.0)))
+        for w in (self._aa_width, self._aa_height, self._aa_offset_x, self._aa_offset_y):
+            w.setEnabled(aa_enabled)
         self._loading = False
+
+    def _on_aa_toggled(self, checked):
+        """Handle custom active area checkbox toggle."""
+        for w in (self._aa_width, self._aa_height, self._aa_offset_x, self._aa_offset_y):
+            w.setEnabled(checked)
+        if not self._loading and checked:
+            # Pre-fill with screen values when first enabling
+            idx = self._current_screen_index()
+            screen = self._settings.get_screen(idx)
+            if screen and not screen.get('active_area_enabled', False):
+                self._loading = True
+                self._aa_width.setValue(self._width.value())
+                self._aa_height.setValue(self._height.value())
+                self._aa_offset_x.setValue(self._offset_x.value())
+                self._aa_offset_y.setValue(self._offset_y.value())
+                self._loading = False
+        self._emit_settings()
 
     def _emit_settings(self):
         if self._loading:
@@ -151,6 +217,11 @@ class ScreensWidget(QWidget):
             'screen_height_mm': self._height.value(),
             'screen_offset_x': self._offset_x.value(),
             'screen_offset_y': self._offset_y.value(),
+            'active_area_enabled': self._aa_enabled.isChecked(),
+            'active_area_width_mm': self._aa_width.value(),
+            'active_area_height_mm': self._aa_height.value(),
+            'active_area_offset_x': self._aa_offset_x.value(),
+            'active_area_offset_y': self._aa_offset_y.value(),
         }
         self._settings.update_screen(idx, **changes)
         # Update list item text in real-time

@@ -35,6 +35,11 @@ def _default_screen():
         'screen_height_mm': 1080.0,
         'screen_offset_x': 0.0,
         'screen_offset_y': 0.0,
+        'active_area_enabled': False,
+        'active_area_width_mm': 1920.0,
+        'active_area_height_mm': 1080.0,
+        'active_area_offset_x': 0.0,
+        'active_area_offset_y': 0.0,
     }
 
 

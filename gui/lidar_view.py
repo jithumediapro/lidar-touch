@@ -159,6 +159,33 @@ class LidarView(QWidget):
             self._pan_start = event.pos()
             self.setCursor(Qt.ClosedHandCursor)
 
+    def _snap_to_screen_edges(self, x_mm, y_mm, snap_threshold_mm=200.0):
+        """Snap position to the nearest screen edge midpoint if within threshold."""
+        snap = self._settings.get_snapshot()
+        screens = snap.get('screens', [])
+        best_dist = snap_threshold_mm
+        snap_x, snap_y = x_mm, y_mm
+        for screen in screens:
+            ox = screen.get('screen_offset_x', 0.0)
+            oy = screen.get('screen_offset_y', 0.0)
+            half_w = screen.get('screen_width_mm', 0.0) / 2.0
+            half_h = screen.get('screen_height_mm', 0.0) / 2.0
+            # Four edge midpoints
+            edges = [
+                (ox - half_w, oy),   # bottom edge (closest to sensor)
+                (ox + half_w, oy),   # top edge (farthest from sensor)
+                (ox, oy - half_h),   # left edge
+                (ox, oy + half_h),   # right edge
+            ]
+            for ex, ey in edges:
+                dx = x_mm - ex
+                dy = y_mm - ey
+                dist = math.sqrt(dx * dx + dy * dy)
+                if dist < best_dist:
+                    best_dist = dist
+                    snap_x, snap_y = ex, ey
+        return snap_x, snap_y
+
     def mouseMoveEvent(self, event):
         if self._drag_target is not None and self._drag_start_mouse is not None:
             cx, cy, scale, _snap = self._compute_canvas_params()
@@ -196,12 +223,25 @@ class LidarView(QWidget):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
             if self._drag_target is not None:
+                # Snap sensor to nearest screen edge on release
+                if self._drag_target == 'sensor' and self._drag_index >= 0:
+                    sensor = self._settings.get_sensor(self._drag_index)
+                    if sensor:
+                        sx = sensor.get('sensor_x_offset', 0.0)
+                        sy = sensor.get('sensor_y_offset', 0.0)
+                        snapped_x, snapped_y = self._snap_to_screen_edges(sx, sy)
+                        self._settings.update_sensor(
+                            self._drag_index,
+                            sensor_x_offset=round(snapped_x, 1),
+                            sensor_y_offset=round(snapped_y, 1),
+                        )
                 self._drag_target = None
                 self._drag_index = -1
                 self._drag_start_offset = None
                 self._drag_start_mouse = None
                 self.setCursor(Qt.CrossCursor if self._move_mode else Qt.ArrowCursor)
                 self.object_moved.emit()
+                self.update()
                 return
             self._panning = False
             self._pan_start = None
@@ -448,6 +488,11 @@ class LidarView(QWidget):
             'screen_offset_x': screen_dict.get('screen_offset_x', 0.0),
             'screen_offset_y': screen_dict.get('screen_offset_y', 0.0),
             'name': screen_dict.get('name', 'Screen'),
+            'active_area_enabled': screen_dict.get('active_area_enabled', False),
+            'active_area_width_mm': screen_dict.get('active_area_width_mm', screen_dict.get('screen_width_mm', 1920.0)),
+            'active_area_height_mm': screen_dict.get('active_area_height_mm', screen_dict.get('screen_height_mm', 1080.0)),
+            'active_area_offset_x': screen_dict.get('active_area_offset_x', screen_dict.get('screen_offset_x', 0.0)),
+            'active_area_offset_y': screen_dict.get('active_area_offset_y', screen_dict.get('screen_offset_y', 0.0)),
         }
 
     def _draw_distance_rings(self, painter, cx, cy, scale, max_dist):
@@ -578,12 +623,18 @@ class LidarView(QWidget):
             painter.drawPoint(QPointF(sx, sy))
 
     def _is_touch_in_any_screen(self, x_mm, y_mm, screens):
-        """Check if a touch point falls within any screen rectangle."""
+        """Check if a touch point falls within any screen's active area."""
         for screen in screens:
-            w = screen.get('screen_width_mm', 0)
-            h = screen.get('screen_height_mm', 0)
-            ox = screen.get('screen_offset_x', 0)
-            oy = screen.get('screen_offset_y', 0)
+            if screen.get('active_area_enabled', False):
+                w = screen.get('active_area_width_mm', 0)
+                h = screen.get('active_area_height_mm', 0)
+                ox = screen.get('active_area_offset_x', 0)
+                oy = screen.get('active_area_offset_y', 0)
+            else:
+                w = screen.get('screen_width_mm', 0)
+                h = screen.get('screen_height_mm', 0)
+                ox = screen.get('screen_offset_x', 0)
+                oy = screen.get('screen_offset_y', 0)
             if w <= 0 or h <= 0:
                 continue
             half_w = w / 2.0
@@ -752,12 +803,23 @@ class LidarView(QWidget):
         )
 
     def _draw_active_area(self, painter, cx, cy, scale, screen_snap, sensor_snap):
-        """Draw the active area (intersection of screen and detection zone)."""
-        screen_path = self._build_screen_area_path(cx, cy, scale, screen_snap)
-        if screen_path.isEmpty():
-            return
-        zone_path = self._build_detection_zone_path(cx, cy, scale, sensor_snap)
-        active_path = screen_path.intersected(zone_path)
+        """Draw the active area overlay in green.
+
+        Draws the exact rectangle that matches CoordinateMapper.is_in_screen_area
+        (no sensor angular range clipping). When active_area_enabled is True, uses
+        the custom active area dimensions; when False, uses the screen dimensions.
+        """
+        if screen_snap.get('active_area_enabled', False):
+            aa_snap = {
+                'screen_width_mm': screen_snap['active_area_width_mm'],
+                'screen_height_mm': screen_snap['active_area_height_mm'],
+                'screen_offset_x': screen_snap['active_area_offset_x'],
+                'screen_offset_y': screen_snap['active_area_offset_y'],
+            }
+            active_path = self._build_screen_area_path(cx, cy, scale, aa_snap)
+        else:
+            active_path = self._build_screen_area_path(cx, cy, scale, screen_snap)
+
         if active_path.isEmpty():
             return
 

@@ -10,7 +10,12 @@ class CoordinateMapper:
                  sensor_x_offset=0.0, sensor_y_offset=0.0,
                  sensor_z_rotation=0.0, x_flip=False, y_flip=False,
                  min_angle_deg=-135.0, max_angle_deg=135.0,
-                 min_dist_mm=20.0, max_dist_mm=1500.0):
+                 min_dist_mm=20.0, max_dist_mm=1500.0,
+                 active_area_enabled=False,
+                 active_area_width_mm=None,
+                 active_area_height_mm=None,
+                 active_area_offset_x=None,
+                 active_area_offset_y=None):
         self.screen_width_mm = screen_width_mm
         self.screen_height_mm = screen_height_mm
         self.screen_offset_x = screen_offset_x
@@ -24,6 +29,11 @@ class CoordinateMapper:
         self.max_angle_rad = math.radians(max_angle_deg)
         self.min_dist_mm = min_dist_mm
         self.max_dist_mm = max_dist_mm
+        self.active_area_enabled = active_area_enabled
+        self.active_area_width_mm = active_area_width_mm
+        self.active_area_height_mm = active_area_height_mm
+        self.active_area_offset_x = active_area_offset_x
+        self.active_area_offset_y = active_area_offset_y
 
     def update_params(self, **kwargs):
         for key, value in kwargs.items():
@@ -57,31 +67,41 @@ class CoordinateMapper:
 
         return rx, ry
 
+    def _effective_area(self):
+        """Return (width, height, offset_x, offset_y) for the effective bounds area."""
+        if self.active_area_enabled and self.active_area_width_mm is not None:
+            return (self.active_area_width_mm, self.active_area_height_mm,
+                    self.active_area_offset_x, self.active_area_offset_y)
+        return (self.screen_width_mm, self.screen_height_mm,
+                self.screen_offset_x, self.screen_offset_y)
+
     def to_normalized(self, x_mm, y_mm):
         """
         Map Cartesian point (mm) to normalized [0, 1] coordinates for TUIO.
 
-        Uses the screen rectangle (active area) for normalization:
-        - X: horizontal position mapped to [0, 1] across screen width
-        - Y: vertical position mapped to [0, 1] across screen height
+        Uses the active area rectangle (or screen rectangle when active area
+        is disabled) for normalization:
+        - X: horizontal position mapped to [0, 1] across area width
+        - Y: vertical position mapped to [0, 1] across area height
         """
         # Apply sensor transform
         tx, ty = self.apply_transform(x_mm, y_mm)
 
-        # Normalize relative to screen rectangle
-        # Screen left/right edges
-        half_w = self.screen_width_mm / 2.0
-        half_h = self.screen_height_mm / 2.0
-        screen_left = self.screen_offset_x - half_w
-        screen_bottom = self.screen_offset_y - half_h
+        area_w, area_h, area_ox, area_oy = self._effective_area()
 
-        if self.screen_width_mm > 0:
-            nx = (tx - screen_left) / self.screen_width_mm
+        # Normalize relative to area rectangle
+        half_w = area_w / 2.0
+        half_h = area_h / 2.0
+        area_left = area_ox - half_w
+        area_bottom = area_oy - half_h
+
+        if area_w > 0:
+            nx = (tx - area_left) / area_w
         else:
             nx = 0.5
 
-        if self.screen_height_mm > 0:
-            ny = (ty - screen_bottom) / self.screen_height_mm
+        if area_h > 0:
+            ny = (ty - area_bottom) / area_h
         else:
             ny = 0.5
 
@@ -98,11 +118,12 @@ class CoordinateMapper:
         return nx, ny
 
     def is_in_screen_area(self, x_mm, y_mm):
-        """Check if a Cartesian point falls within the screen rectangle."""
+        """Check if a Cartesian point falls within the active area (or screen rectangle)."""
         tx, ty = self.apply_transform(x_mm, y_mm)
 
-        half_w = self.screen_width_mm / 2.0
-        half_h = self.screen_height_mm / 2.0
+        area_w, area_h, area_ox, area_oy = self._effective_area()
+        half_w = area_w / 2.0
+        half_h = area_h / 2.0
 
-        return (self.screen_offset_x - half_w <= tx <= self.screen_offset_x + half_w and
-                self.screen_offset_y - half_h <= ty <= self.screen_offset_y + half_h)
+        return (area_ox - half_w <= tx <= area_ox + half_w and
+                area_oy - half_h <= ty <= area_oy + half_h)
