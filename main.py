@@ -1,4 +1,5 @@
 import sys
+import os
 import argparse
 
 from PyQt5.QtWidgets import QApplication
@@ -10,13 +11,25 @@ from tuio.sender import TuioSender
 from gui.main_window import MainWindow
 
 
+def _resolve_settings_path(path):
+    """Resolve settings path relative to the exe directory when frozen."""
+    if os.path.isabs(path):
+        return path
+    if getattr(sys, 'frozen', False):
+        base = os.path.dirname(sys.executable)
+    else:
+        base = os.getcwd()
+    return os.path.join(base, path)
+
+
 def main():
-    parser = argparse.ArgumentParser(description="LiDAR Touch - OptiTUIO-style Application")
+    parser = argparse.ArgumentParser(description="M-Touch - Multi-Touch LiDAR Application")
     parser.add_argument("--mock", action="store_true",
                         help="Use mock LiDAR scanner (no hardware required)")
     parser.add_argument("--settings", type=str, default="settings.json",
                         help="Path to settings JSON file")
     args = parser.parse_args()
+    args.settings = _resolve_settings_path(args.settings)
 
     # Load or create settings
     try:
@@ -25,7 +38,7 @@ def main():
         settings = AppSettings()
 
     app = QApplication(sys.argv)
-    app.setApplicationName("LiDAR Touch")
+    app.setApplicationName("M-Touch")
 
     snap = settings.get_snapshot()
 
