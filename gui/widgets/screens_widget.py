@@ -2,7 +2,7 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
     QLineEdit, QDoubleSpinBox, QFormLayout, QListWidget,
-    QPushButton, QCheckBox,
+    QPushButton, QCheckBox, QScrollArea,
 )
 
 
@@ -21,7 +21,14 @@ class ScreensWidget(QWidget):
         self._load_screen_list()
 
     def _setup_ui(self):
-        layout = QVBoxLayout(self)
+        outer_layout = QVBoxLayout(self)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_content = QWidget()
+        layout = QVBoxLayout(scroll_content)
+        scroll.setWidget(scroll_content)
+        outer_layout.addWidget(scroll)
 
         # --- Screen List Group ---
         list_group = QGroupBox("Screens")
@@ -82,6 +89,12 @@ class ScreensWidget(QWidget):
         group.setLayout(form)
         layout.addWidget(group)
 
+        # Set screen config defaults (template for next Add)
+        self._width.setValue(1920.0)
+        self._height.setValue(1080.0)
+        self._offset_x.setValue(0.0)
+        self._offset_y.setValue(0.0)
+
         # --- Active Area Group ---
         aa_group = QGroupBox("Active Area")
         aa_form = QFormLayout()
@@ -118,6 +131,62 @@ class ScreensWidget(QWidget):
 
         aa_group.setLayout(aa_form)
         layout.addWidget(aa_group)
+
+        # --- Exclude Zones Group ---
+        ez_group = QGroupBox("Exclude Zones")
+        ez_layout = QVBoxLayout()
+
+        self._ez_list = QListWidget()
+        self._ez_list.setMaximumHeight(80)
+        self._ez_list.currentRowChanged.connect(self._on_ez_selected)
+        ez_layout.addWidget(self._ez_list)
+
+        ez_btn_layout = QHBoxLayout()
+        self._add_ez_btn = QPushButton("Add Zone")
+        self._add_ez_btn.clicked.connect(self._on_add_ez)
+        ez_btn_layout.addWidget(self._add_ez_btn)
+        self._remove_ez_btn = QPushButton("Remove Zone")
+        self._remove_ez_btn.clicked.connect(self._on_remove_ez)
+        ez_btn_layout.addWidget(self._remove_ez_btn)
+        ez_layout.addLayout(ez_btn_layout)
+
+        ez_form = QFormLayout()
+        self._ez_x = QDoubleSpinBox()
+        self._ez_x.setRange(-50000, 50000)
+        self._ez_x.setSuffix(" mm")
+        self._ez_x.valueChanged.connect(self._on_ez_spinbox_changed)
+        ez_form.addRow("X:", self._ez_x)
+
+        self._ez_y = QDoubleSpinBox()
+        self._ez_y.setRange(-50000, 50000)
+        self._ez_y.setSuffix(" mm")
+        self._ez_y.valueChanged.connect(self._on_ez_spinbox_changed)
+        ez_form.addRow("Y:", self._ez_y)
+
+        self._ez_w = QDoubleSpinBox()
+        self._ez_w.setRange(1, 100000)
+        self._ez_w.setSuffix(" mm")
+        self._ez_w.setSingleStep(10)
+        self._ez_w.valueChanged.connect(self._on_ez_spinbox_changed)
+        ez_form.addRow("Width:", self._ez_w)
+
+        self._ez_h = QDoubleSpinBox()
+        self._ez_h.setRange(1, 100000)
+        self._ez_h.setSuffix(" mm")
+        self._ez_h.setSingleStep(10)
+        self._ez_h.valueChanged.connect(self._on_ez_spinbox_changed)
+        ez_form.addRow("Height:", self._ez_h)
+
+        ez_layout.addLayout(ez_form)
+        ez_group.setLayout(ez_layout)
+        layout.addWidget(ez_group)
+
+        # Set default values for exclude zone spinboxes (template for next Add)
+        self._ez_x.setValue(0.0)
+        self._ez_y.setValue(0.0)
+        self._ez_w.setValue(100.0)
+        self._ez_h.setValue(100.0)
+        self._remove_ez_btn.setEnabled(False)
 
         # Info
         info_group = QGroupBox("Info")
@@ -162,30 +231,40 @@ class ScreensWidget(QWidget):
         idx = self._current_screen_index()
         screen = self._settings.get_screen(idx)
         has_screen = screen is not None
-        for widget in (self._name_edit, self._width, self._height,
-                       self._offset_x, self._offset_y):
-            widget.setEnabled(has_screen)
-        self._aa_enabled.setEnabled(has_screen)
-        if not has_screen:
+
+        if has_screen:
+            self._name_edit.setText(screen.get('name', 'Screen'))
+            self._width.setValue(screen.get('screen_width_mm', 1920.0))
+            self._height.setValue(screen.get('screen_height_mm', 1080.0))
+            self._offset_x.setValue(screen.get('screen_offset_x', 0.0))
+            self._offset_y.setValue(screen.get('screen_offset_y', 0.0))
+
+            aa_enabled = screen.get('active_area_enabled', False)
+            self._aa_enabled.setChecked(aa_enabled)
+            self._aa_width.setValue(screen.get('active_area_width_mm', screen.get('screen_width_mm', 1920.0)))
+            self._aa_height.setValue(screen.get('active_area_height_mm', screen.get('screen_height_mm', 1080.0)))
+            self._aa_offset_x.setValue(screen.get('active_area_offset_x', screen.get('screen_offset_x', 0.0)))
+            self._aa_offset_y.setValue(screen.get('active_area_offset_y', screen.get('screen_offset_y', 0.0)))
             for w in (self._aa_width, self._aa_height, self._aa_offset_x, self._aa_offset_y):
-                w.setEnabled(False)
-            self._loading = False
-            return
+                w.setEnabled(aa_enabled)
 
-        self._name_edit.setText(screen.get('name', 'Screen'))
-        self._width.setValue(screen.get('screen_width_mm', 1920.0))
-        self._height.setValue(screen.get('screen_height_mm', 1080.0))
-        self._offset_x.setValue(screen.get('screen_offset_x', 0.0))
-        self._offset_y.setValue(screen.get('screen_offset_y', 0.0))
+            # Populate exclude zones list
+            self._ez_list.blockSignals(True)
+            self._ez_list.clear()
+            zones = screen.get('exclude_zones', [])
+            for i in range(len(zones)):
+                self._ez_list.addItem(f"Zone {i + 1}")
+            self._ez_list.blockSignals(False)
+            self._remove_ez_btn.setEnabled(len(zones) > 0)
+            self._add_ez_btn.setEnabled(True)
+        else:
+            # No screen selected — clear exclude zone list, keep fields as template
+            self._ez_list.blockSignals(True)
+            self._ez_list.clear()
+            self._ez_list.blockSignals(False)
+            self._remove_ez_btn.setEnabled(False)
+            self._add_ez_btn.setEnabled(False)
 
-        aa_enabled = screen.get('active_area_enabled', False)
-        self._aa_enabled.setChecked(aa_enabled)
-        self._aa_width.setValue(screen.get('active_area_width_mm', screen.get('screen_width_mm', 1920.0)))
-        self._aa_height.setValue(screen.get('active_area_height_mm', screen.get('screen_height_mm', 1080.0)))
-        self._aa_offset_x.setValue(screen.get('active_area_offset_x', screen.get('screen_offset_x', 0.0)))
-        self._aa_offset_y.setValue(screen.get('active_area_offset_y', screen.get('screen_offset_y', 0.0)))
-        for w in (self._aa_width, self._aa_height, self._aa_offset_x, self._aa_offset_y):
-            w.setEnabled(aa_enabled)
         self._loading = False
 
     def _on_aa_toggled(self, checked):
@@ -211,6 +290,9 @@ class ScreensWidget(QWidget):
         idx = self._current_screen_index()
         if idx < 0:
             return
+        # Gather current exclude zones from settings (they're updated in-place by spinbox changes)
+        screen = self._settings.get_screen(idx)
+        current_zones = screen.get('exclude_zones', []) if screen else []
         changes = {
             'name': self._name_edit.text(),
             'screen_width_mm': self._width.value(),
@@ -222,6 +304,7 @@ class ScreensWidget(QWidget):
             'active_area_height_mm': self._aa_height.value(),
             'active_area_offset_x': self._aa_offset_x.value(),
             'active_area_offset_y': self._aa_offset_y.value(),
+            'exclude_zones': current_zones,
         }
         self._settings.update_screen(idx, **changes)
         # Update list item text in real-time
@@ -232,6 +315,19 @@ class ScreensWidget(QWidget):
 
     def _on_add_screen(self):
         idx = self._settings.add_screen()
+        # Apply current spinbox values (template) to the new screen
+        self._settings.update_screen(idx,
+            name=self._name_edit.text() or f'Screen {idx + 1}',
+            screen_width_mm=self._width.value(),
+            screen_height_mm=self._height.value(),
+            screen_offset_x=self._offset_x.value(),
+            screen_offset_y=self._offset_y.value(),
+            active_area_enabled=self._aa_enabled.isChecked(),
+            active_area_width_mm=self._aa_width.value(),
+            active_area_height_mm=self._aa_height.value(),
+            active_area_offset_x=self._aa_offset_x.value(),
+            active_area_offset_y=self._aa_offset_y.value(),
+        )
         self._load_screen_list()
         self._screen_list.setCurrentRow(idx)
         self.screen_added.emit(idx)
@@ -243,6 +339,91 @@ class ScreensWidget(QWidget):
         if self._settings.remove_screen(idx):
             self.screen_removed.emit(idx)
             self._load_screen_list()
+
+    def _on_ez_selected(self, row):
+        """Load the selected exclude zone's values into spinboxes."""
+        idx = self._current_screen_index()
+        screen = self._settings.get_screen(idx)
+        if screen is None:
+            return
+        zones = screen.get('exclude_zones', [])
+        has_selection = 0 <= row < len(zones)
+        self._remove_ez_btn.setEnabled(has_selection)
+        if has_selection:
+            self._loading = True
+            zone = zones[row]
+            self._ez_x.setValue(zone.get('x', 0.0))
+            self._ez_y.setValue(zone.get('y', 0.0))
+            self._ez_w.setValue(zone.get('width', 100.0))
+            self._ez_h.setValue(zone.get('height', 100.0))
+            self._loading = False
+
+    def _on_add_ez(self):
+        """Add a new exclude zone using current spinbox values as template."""
+        idx = self._current_screen_index()
+        screen = self._settings.get_screen(idx)
+        if screen is None:
+            return
+        zones = screen.get('exclude_zones', [])
+        zones.append({
+            'x': self._ez_x.value(),
+            'y': self._ez_y.value(),
+            'width': self._ez_w.value(),
+            'height': self._ez_h.value(),
+        })
+        self._settings.update_screen(idx, exclude_zones=zones)
+        # Refresh list
+        self._ez_list.blockSignals(True)
+        self._ez_list.addItem(f"Zone {len(zones)}")
+        self._ez_list.blockSignals(False)
+        self._ez_list.setCurrentRow(len(zones) - 1)
+        self._remove_ez_btn.setEnabled(True)
+        self.settings_changed.emit({})
+
+    def _on_remove_ez(self):
+        """Remove the currently selected exclude zone."""
+        ez_row = self._ez_list.currentRow()
+        idx = self._current_screen_index()
+        screen = self._settings.get_screen(idx)
+        if screen is None or ez_row < 0:
+            return
+        zones = screen.get('exclude_zones', [])
+        if ez_row < len(zones):
+            zones.pop(ez_row)
+            self._settings.update_screen(idx, exclude_zones=zones)
+            # Refresh list
+            self._ez_list.blockSignals(True)
+            self._ez_list.clear()
+            for i in range(len(zones)):
+                self._ez_list.addItem(f"Zone {i + 1}")
+            self._ez_list.blockSignals(False)
+            if zones:
+                new_row = min(ez_row, len(zones) - 1)
+                self._ez_list.setCurrentRow(new_row)
+            else:
+                self._remove_ez_btn.setEnabled(False)
+            self.settings_changed.emit({})
+
+    def _on_ez_spinbox_changed(self):
+        """Update the selected exclude zone when spinbox values change."""
+        if self._loading:
+            return
+        idx = self._current_screen_index()
+        ez_row = self._ez_list.currentRow()
+        screen = self._settings.get_screen(idx)
+        if screen is None or ez_row < 0:
+            return
+        zones = screen.get('exclude_zones', [])
+        if ez_row >= len(zones):
+            return
+        zones[ez_row] = {
+            'x': self._ez_x.value(),
+            'y': self._ez_y.value(),
+            'width': self._ez_w.value(),
+            'height': self._ez_h.value(),
+        }
+        self._settings.update_screen(idx, exclude_zones=zones)
+        self.settings_changed.emit({})
 
     def get_screen_names(self):
         """Return list of screen names for use by outputs widget."""
