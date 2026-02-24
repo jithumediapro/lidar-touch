@@ -24,7 +24,7 @@ class MainWindow(QMainWindow):
         self._mock_mode = mock_mode
         self._settings_path = "settings.json"
 
-        self.setWindowTitle("LiDAR Touch - OptiTUIO-style")
+        self.setWindowTitle("M-Touch")
         self.resize(1200, 700)
 
         self._setup_ui()
@@ -329,9 +329,9 @@ class MainWindow(QMainWindow):
     def _show_about(self):
         QMessageBox.about(
             self,
-            "About LiDAR Touch",
-            "LiDAR Touch - OptiTUIO-style Application\n\n"
-            "Converts Hokuyo UST-10LX LiDAR scan data\n"
+            "About M-Touch",
+            "M-Touch - Multi-Touch LiDAR Application\n\n"
+            "Converts Hokuyo LiDAR scan data\n"
             "into multi-touch input via TUIO 1.1 protocol.\n\n"
             "Features:\n"
             "- Real-time scan visualization\n"

@@ -5,7 +5,7 @@
       "model": "UST-10LX",
       "lidar_ip": "192.168.0.10",
       "lidar_port": 10940,
-      "sensor_x_offset": -500.0,
+      "sensor_x_offset": -750.0,
       "sensor_y_offset": 0.0,
       "sensor_z_rotation": 0.0,
       "sensor_x_flip": false,
@@ -19,8 +19,8 @@
   "screens": [
     {
       "name": "Screen 1",
-      "screen_width_mm": 1000.0,
-      "screen_height_mm": 1000.0,
+      "screen_width_mm": 1500.0,
+      "screen_height_mm": 1500.0,
       "screen_offset_x": 0.0,
       "screen_offset_y": 0.0,
       "active_area_enabled": false,

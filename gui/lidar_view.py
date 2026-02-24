@@ -431,6 +431,8 @@ class LidarView(QWidget):
                 for sensor in sensors:
                     sensor_snap = self._make_sensor_snap(sensor)
                     self._draw_active_area(painter, cx, cy, scale, screen_snap, sensor_snap)
+                # Draw exclude zones once per screen
+                self._draw_exclude_zones(painter, cx, cy, scale, screen_snap)
 
         # Draw per-sensor scan data
         for si, frame in self._frames.items():
@@ -448,7 +450,7 @@ class LidarView(QWidget):
 
             self._draw_scan_points(painter, scx, scy, scale, frame)
             self._draw_foreground_points(painter, scx, scy, scale, frame)
-            self._draw_touch_markers(painter, scx, scy, scale, frame, screens)
+            self._draw_touch_markers(painter, scx, scy, scale, frame, screens, sensor_snap)
             painter.restore()
 
         # Draw per-sensor icons
@@ -493,6 +495,7 @@ class LidarView(QWidget):
             'active_area_height_mm': screen_dict.get('active_area_height_mm', screen_dict.get('screen_height_mm', 1080.0)),
             'active_area_offset_x': screen_dict.get('active_area_offset_x', screen_dict.get('screen_offset_x', 0.0)),
             'active_area_offset_y': screen_dict.get('active_area_offset_y', screen_dict.get('screen_offset_y', 0.0)),
+            'exclude_zones': screen_dict.get('exclude_zones', []),
         }
 
     def _draw_distance_rings(self, painter, cx, cy, scale, max_dist):
@@ -622,8 +625,22 @@ class LidarView(QWidget):
             painter.setPen(QPen(color, 4))
             painter.drawPoint(QPointF(sx, sy))
 
-    def _is_touch_in_any_screen(self, x_mm, y_mm, screens):
-        """Check if a touch point falls within any screen's active area."""
+    def _apply_sensor_transform_coords(self, x_mm, y_mm, sensor_snap):
+        """Apply sensor rotation and offset to transform raw coords to global coords."""
+        if sensor_snap is None:
+            return x_mm, y_mm
+        z_rot = math.radians(sensor_snap.get('sensor_z_rotation', 0.0))
+        cos_r = math.cos(z_rot)
+        sin_r = math.sin(z_rot)
+        rx = x_mm * cos_r - y_mm * sin_r
+        ry = x_mm * sin_r + y_mm * cos_r
+        rx += sensor_snap.get('sensor_x_offset', 0.0)
+        ry += sensor_snap.get('sensor_y_offset', 0.0)
+        return rx, ry
+
+    def _is_touch_in_any_screen(self, x_mm, y_mm, screens, sensor_snap=None):
+        """Check if a touch point falls within any screen's active area and not in an exclude zone."""
+        tx, ty = self._apply_sensor_transform_coords(x_mm, y_mm, sensor_snap)
         for screen in screens:
             if screen.get('active_area_enabled', False):
                 w = screen.get('active_area_width_mm', 0)
@@ -639,12 +656,19 @@ class LidarView(QWidget):
                 continue
             half_w = w / 2.0
             half_h = h / 2.0
-            if (ox - half_w <= x_mm <= ox + half_w and
-                    oy - half_h <= y_mm <= oy + half_h):
+            if (ox - half_w <= tx <= ox + half_w and
+                    oy - half_h <= ty <= oy + half_h):
+                # Check exclude zones
+                for zone in screen.get('exclude_zones', []):
+                    zx, zy = zone.get('x', 0), zone.get('y', 0)
+                    zw, zh = zone.get('width', 0), zone.get('height', 0)
+                    if (zx - zw / 2 <= tx <= zx + zw / 2 and
+                            zy - zh / 2 <= ty <= zy + zh / 2):
+                        return False
                 return True
         return False
 
-    def _draw_touch_markers(self, painter, cx, cy, scale, frame, screens):
+    def _draw_touch_markers(self, painter, cx, cy, scale, frame, screens, sensor_snap=None):
         """Draw touch centroids -- red if inside any screen, gray if outside."""
         for touch in frame.touches:
             x_mm, y_mm = touch.centroid_xy
@@ -652,7 +676,7 @@ class LidarView(QWidget):
             angle = math.atan2(y_mm, x_mm)
             sx, sy = self._angle_to_screen(angle, dist, cx, cy, scale)
 
-            inside = self._is_touch_in_any_screen(x_mm, y_mm, screens)
+            inside = self._is_touch_in_any_screen(x_mm, y_mm, screens, sensor_snap)
 
             r = 12
             if inside:
@@ -832,6 +856,33 @@ class LidarView(QWidget):
         painter.setPen(QPen(QColor(0, 255, 0, 140), 1.5, Qt.DashLine))
         painter.setBrush(Qt.NoBrush)
         painter.drawPath(active_path)
+
+    def _draw_exclude_zones(self, painter, cx, cy, scale, screen_snap):
+        """Draw exclude zones as semi-transparent red rectangles."""
+        for zone in screen_snap.get('exclude_zones', []):
+            zx = zone.get('x', 0)
+            zy = zone.get('y', 0)
+            zw = zone.get('width', 0)
+            zh = zone.get('height', 0)
+            if zw <= 0 or zh <= 0:
+                continue
+            zone_snap = {
+                'screen_width_mm': zw,
+                'screen_height_mm': zh,
+                'screen_offset_x': zx,
+                'screen_offset_y': zy,
+            }
+            zone_path = self._build_screen_area_path(cx, cy, scale, zone_snap)
+            if zone_path.isEmpty():
+                continue
+            # Semi-transparent red fill
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QBrush(QColor(255, 0, 0, 50)))
+            painter.drawPath(zone_path)
+            # Red dashed outline
+            painter.setPen(QPen(QColor(255, 0, 0, 180), 1.5, Qt.DashLine))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawPath(zone_path)
 
     def _draw_sensor(self, painter, cx, cy, scale, snap, label="LiDAR"):
         """Draw the sensor as a 50x50mm (5x5cm) red square, rotated to match sensor orientation."""

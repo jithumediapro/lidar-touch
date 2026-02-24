@@ -1,4 +1,4 @@
-# LiDAR Touch
+# M-Touch
 
 A real-time multi-touch input system that converts Hokuyo LiDAR scanner data into TUIO 1.1 touch events. Detects hand/object touches on a surface using LiDAR scanning and outputs normalized touch coordinates to any TUIO-compatible application.
 

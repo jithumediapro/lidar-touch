@@ -1,0 +1,77 @@
+{
+  "sensors": [
+    {
+      "name": "Sensor 1",
+      "model": "UST-10LX",
+      "lidar_ip": "192.168.0.10",
+      "lidar_port": 10940,
+      "sensor_x_offset": 0.0,
+      "sensor_y_offset": 0.0,
+      "sensor_z_rotation": 0.0,
+      "sensor_x_flip": false,
+      "sensor_y_flip": false,
+      "min_distance_mm": 20.0,
+      "max_distance_mm": 10000.0,
+      "min_angle_deg": -90.0,
+      "max_angle_deg": 90.0
+    },
+    {
+      "name": "Sensor 2",
+      "model": "UST-10LX",
+      "lidar_ip": "192.168.0.10",
+      "lidar_port": 10940,
+      "sensor_x_offset": 0.0,
+      "sensor_y_offset": 1000.0,
+      "sensor_z_rotation": 0.0,
+      "sensor_x_flip": false,
+      "sensor_y_flip": false,
+      "min_distance_mm": 20.0,
+      "max_distance_mm": 10000.0,
+      "min_angle_deg": -90.0,
+      "max_angle_deg": 90.0
+    }
+  ],
+  "screens": [
+    {
+      "name": "Screen 1",
+      "screen_width_mm": 2000.0,
+      "screen_height_mm": 1000.0,
+      "screen_offset_x": 1000.0,
+      "screen_offset_y": 0.0
+    },
+    {
+      "name": "Screen 2",
+      "screen_width_mm": 2000.0,
+      "screen_height_mm": 1000.0,
+      "screen_offset_x": 1000.0,
+      "screen_offset_y": 1000.0
+    }
+  ],
+  "outputs": [
+    {
+      "name": "Output 1",
+      "screen_index": 0,
+      "tuio_host": "127.0.0.1",
+      "tuio_port": 3333,
+      "tuio_enabled": true
+    },
+    {
+      "name": "Output 2",
+      "screen_index": 1,
+      "tuio_host": "127.0.0.1",
+      "tuio_port": 3334,
+      "tuio_enabled": true
+    }
+  ],
+  "bg_learning_frames": 30,
+  "bg_subtraction_threshold_mm": 40.0,
+  "cluster_eps_mm": 30.0,
+  "cluster_min_samples": 3,
+  "min_cluster_size": 3,
+  "min_touch_segments": 2,
+  "max_tracking_distance_mm": 50.0,
+  "touch_timeout_frames": 3,
+  "merge_distance_mm": 20.0,
+  "kalman_filter": false,
+  "smoothing_value": 0.5
+}

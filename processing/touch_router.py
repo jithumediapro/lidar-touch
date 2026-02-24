@@ -29,6 +29,7 @@ class TouchRouter(QObject):
             'active_area_height_mm': screen_cfg.get('active_area_height_mm'),
             'active_area_offset_x': screen_cfg.get('active_area_offset_x'),
             'active_area_offset_y': screen_cfg.get('active_area_offset_y'),
+            'exclude_zones': screen_cfg.get('exclude_zones', []),
         }
         mapper = self._mappers.get(key)
         if mapper is None:

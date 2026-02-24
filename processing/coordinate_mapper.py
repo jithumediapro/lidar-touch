@@ -15,7 +15,8 @@ class CoordinateMapper:
                  active_area_width_mm=None,
                  active_area_height_mm=None,
                  active_area_offset_x=None,
-                 active_area_offset_y=None):
+                 active_area_offset_y=None,
+                 exclude_zones=None):
         self.screen_width_mm = screen_width_mm
         self.screen_height_mm = screen_height_mm
         self.screen_offset_x = screen_offset_x
@@ -34,6 +35,7 @@ class CoordinateMapper:
         self.active_area_height_mm = active_area_height_mm
         self.active_area_offset_x = active_area_offset_x
         self.active_area_offset_y = active_area_offset_y
+        self.exclude_zones = exclude_zones or []
 
     def update_params(self, **kwargs):
         for key, value in kwargs.items():
@@ -117,13 +119,30 @@ class CoordinateMapper:
 
         return nx, ny
 
+    def _is_in_exclude_zone(self, tx, ty):
+        """Check if a transformed point falls within any exclude zone."""
+        for zone in self.exclude_zones:
+            zx, zy = zone.get('x', 0), zone.get('y', 0)
+            zw, zh = zone.get('width', 0), zone.get('height', 0)
+            if (zx - zw / 2 <= tx <= zx + zw / 2 and
+                    zy - zh / 2 <= ty <= zy + zh / 2):
+                return True
+        return False
+
     def is_in_screen_area(self, x_mm, y_mm):
-        """Check if a Cartesian point falls within the active area (or screen rectangle)."""
+        """Check if a Cartesian point falls within the active area (or screen rectangle)
+        and is not inside any exclude zone."""
         tx, ty = self.apply_transform(x_mm, y_mm)
 
         area_w, area_h, area_ox, area_oy = self._effective_area()
         half_w = area_w / 2.0
         half_h = area_h / 2.0
 
-        return (area_ox - half_w <= tx <= area_ox + half_w and
-                area_oy - half_h <= ty <= area_oy + half_h)
+        if not (area_ox - half_w <= tx <= area_ox + half_w and
+                area_oy - half_h <= ty <= area_oy + half_h):
+            return False
+
+        if self._is_in_exclude_zone(tx, ty):
+            return False
+
+        return True
