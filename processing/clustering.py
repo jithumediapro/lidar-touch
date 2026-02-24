@@ -14,18 +14,21 @@ class DetectedBlob:
 class BlobDetector:
     """DBSCAN-based blob detection on Cartesian foreground points."""
 
-    def __init__(self, eps_mm=30.0, min_samples=3, min_cluster_size=3):
+    def __init__(self, eps_mm=30.0, min_samples=3, min_cluster_size=3, max_extent_mm=None):
         self.eps_mm = eps_mm
         self.min_samples = min_samples
         self.min_cluster_size = min_cluster_size
+        self.max_extent_mm = max_extent_mm
 
-    def update_params(self, eps_mm=None, min_samples=None, min_cluster_size=None):
+    def update_params(self, eps_mm=None, min_samples=None, min_cluster_size=None, max_extent_mm=None):
         if eps_mm is not None:
             self.eps_mm = eps_mm
         if min_samples is not None:
             self.min_samples = min_samples
         if min_cluster_size is not None:
             self.min_cluster_size = min_cluster_size
+        if max_extent_mm is not None:
+            self.max_extent_mm = max_extent_mm
 
     def detect(self, points_xy):
         """
@@ -59,6 +62,10 @@ class BlobDetector:
             diffs = cluster_points - centroid
             dists = np.sqrt((diffs ** 2).sum(axis=1))
             extent = float(dists.max())
+
+            # Skip blobs that are too large (e.g. books, hands)
+            if self.max_extent_mm is not None and extent > self.max_extent_mm:
+                continue
 
             blobs.append(DetectedBlob(
                 centroid_xy=(float(centroid[0]), float(centroid[1])),

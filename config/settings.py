@@ -40,6 +40,7 @@ def _default_screen():
         'active_area_height_mm': 1080.0,
         'active_area_offset_x': 0.0,
         'active_area_offset_y': 0.0,
+        'exclude_zones': [],
     }
 
 
@@ -70,6 +71,8 @@ class AppSettings:
     max_tracking_distance_mm: float = 50.0
     touch_timeout_frames: int = 3
     merge_distance_mm: float = 20.0
+    max_blob_extent_mm: float = 50.0
+    min_touch_age_frames: int = 1
     kalman_filter: bool = False
     smoothing_value: float = 0.5
 

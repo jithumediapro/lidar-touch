@@ -28,9 +28,10 @@ class _Track:
 class BlobTracker:
     """Greedy nearest-neighbor blob tracker with persistent session IDs."""
 
-    def __init__(self, max_distance_mm=50.0, timeout_frames=3):
+    def __init__(self, max_distance_mm=50.0, timeout_frames=3, min_age_frames=1):
         self.max_distance_mm = max_distance_mm
         self.timeout_frames = timeout_frames
+        self.min_age_frames = min_age_frames
         self._tracks = []
         self._next_id = 1
 
@@ -116,10 +117,10 @@ class BlobTracker:
             t for t in self._tracks if t.frames_unseen <= self.timeout_frames
         ]
 
-        # Build output
+        # Build output (only emit touches that have been alive long enough)
         result = []
         for track in self._tracks:
-            if track.frames_unseen == 0:
+            if track.frames_unseen == 0 and track.age_frames >= self.min_age_frames:
                 result.append(TrackedTouch(
                     session_id=track.session_id,
                     centroid_xy=track.centroid_xy,

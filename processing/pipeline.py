@@ -69,10 +69,12 @@ class ProcessingPipeline(QThread):
             eps_mm=snap['cluster_eps_mm'],
             min_samples=snap['cluster_min_samples'],
             min_cluster_size=snap['min_cluster_size'],
+            max_extent_mm=snap.get('max_blob_extent_mm'),
         )
         self._tracker = BlobTracker(
             max_distance_mm=snap['max_tracking_distance_mm'],
             timeout_frames=snap['touch_timeout_frames'],
+            min_age_frames=snap.get('min_touch_age_frames', 1),
         )
 
     @pyqtSlot(float, object, object)
@@ -112,9 +114,11 @@ class ProcessingPipeline(QThread):
             eps_mm=snap['cluster_eps_mm'],
             min_samples=snap['cluster_min_samples'],
             min_cluster_size=snap['min_cluster_size'],
+            max_extent_mm=snap.get('max_blob_extent_mm'),
         )
         self._tracker.max_distance_mm = snap['max_tracking_distance_mm']
         self._tracker.timeout_frames = snap['touch_timeout_frames']
+        self._tracker.min_age_frames = snap.get('min_touch_age_frames', 1)
 
     def run(self):
         self._running = True

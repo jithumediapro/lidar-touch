@@ -162,6 +162,24 @@ class DevicesWidget(QWidget):
         self._bg_threshold.valueChanged.connect(self._emit_global_settings)
         adv_layout.addRow("BG Threshold:", self._bg_threshold)
 
+        self._cluster_eps = QDoubleSpinBox()
+        self._cluster_eps.setRange(5, 200)
+        self._cluster_eps.setSuffix(" mm")
+        self._cluster_eps.valueChanged.connect(self._emit_global_settings)
+        adv_layout.addRow("Cluster Eps:", self._cluster_eps)
+
+        self._max_blob_extent = QDoubleSpinBox()
+        self._max_blob_extent.setRange(5, 500)
+        self._max_blob_extent.setSuffix(" mm")
+        self._max_blob_extent.valueChanged.connect(self._emit_global_settings)
+        adv_layout.addRow("Max Blob Extent:", self._max_blob_extent)
+
+        self._min_touch_age = QSpinBox()
+        self._min_touch_age.setRange(1, 10)
+        self._min_touch_age.setSuffix(" frames")
+        self._min_touch_age.valueChanged.connect(self._emit_global_settings)
+        adv_layout.addRow("Min Touch Age:", self._min_touch_age)
+
         adv_group.setLayout(adv_layout)
         layout.addWidget(adv_group)
 
@@ -245,6 +263,9 @@ class DevicesWidget(QWidget):
         self._smoothing.setValue(snap.get('smoothing_value', 0.5))
         self._min_touch_seg.setValue(snap.get('min_touch_segments', 2))
         self._bg_threshold.setValue(snap.get('bg_subtraction_threshold_mm', 40.0))
+        self._cluster_eps.setValue(snap.get('cluster_eps_mm', 50.0))
+        self._max_blob_extent.setValue(snap.get('max_blob_extent_mm', 50.0))
+        self._min_touch_age.setValue(snap.get('min_touch_age_frames', 2))
         self._bg_frames.setValue(snap.get('bg_learning_frames', 30))
 
         if not has_sensor:
@@ -304,6 +325,9 @@ class DevicesWidget(QWidget):
             'smoothing_value': self._smoothing.value(),
             'min_touch_segments': self._min_touch_seg.value(),
             'bg_subtraction_threshold_mm': self._bg_threshold.value(),
+            'cluster_eps_mm': self._cluster_eps.value(),
+            'max_blob_extent_mm': self._max_blob_extent.value(),
+            'min_touch_age_frames': self._min_touch_age.value(),
             'bg_learning_frames': self._bg_frames.value(),
         }
         self._settings.update(**changes)
